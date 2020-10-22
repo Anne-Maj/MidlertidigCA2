@@ -1,0 +1,141 @@
+package facades;
+
+import dto.PersonDTO;
+import dto.PersonsDTO;
+import entities.Address;
+import entities.CityInfo;
+import entities.Hobby;
+import entities.Person;
+import entities.Phone;
+import java.util.ArrayList;
+import java.util.List;
+import javax.persistence.EntityManager;
+import javax.persistence.EntityManagerFactory;
+import javax.persistence.Query;
+import javax.persistence.TypedQuery;
+
+public class PersonFacade {
+
+    private static PersonFacade instance;
+    private static EntityManagerFactory emf;
+
+    //Private Constructor to ensure Singleton
+    public PersonFacade() {
+    }
+
+    /**
+     *
+     * @param _emf
+     * @return an instance of this facade class.
+     */
+    public static PersonFacade getPersonFacade(EntityManagerFactory _emf) {
+        if (instance == null) {
+            emf = _emf;
+            instance = new PersonFacade();
+        }
+        return instance;
+    }
+
+    private EntityManager getEntityManager() {
+        return emf.createEntityManager();
+    }
+
+    public PersonsDTO getAllPersons() {
+        EntityManager em = getEntityManager();
+        try {
+            TypedQuery<Person> query = em.createQuery("SELECT p FROM Person p", Person.class);
+            List<Person> list = query.getResultList();
+            PersonsDTO result = new PersonsDTO(list);
+            return result;
+            
+        } finally {
+            em.close();
+        }
+    }
+
+    public PersonDTO getPersonByPhone(int phone) {
+        EntityManager em = getEntityManager();
+        try {
+            TypedQuery<Person> query = em.createQuery("SELECT p FROM Person p WHERE p.id = (SELECT h.person.id FROM Phone h WHERE h.number = :phone)", Person.class);
+            query.setParameter("phone", phone);
+            Person person = query.getSingleResult();
+            return new PersonDTO(person.getFirstName(), person.getLastname(), person.getAddress().getStreet(), person.getAddress().getCityinfo().getZipCode());
+        } finally {
+            em.close();
+        }
+    }
+
+    public PersonsDTO getAllPersonsByHobby(String hobby) {
+        EntityManager em = getEntityManager();
+        try {
+
+            TypedQuery<Person> query = em.createQuery("SELECT p FROM Person p INNER JOIN p.hobbies Hobby WHERE Hobby.name = :hobby", Person.class);
+            query.setParameter("hobby", hobby);
+            List<Person> resultList = query.getResultList();
+            PersonsDTO result = new PersonsDTO(resultList);
+            return result;
+        } finally {
+            em.close();
+        }
+    }
+
+    public PersonDTO addPerson(PersonDTO personDTO) {
+        EntityManager em = emf.createEntityManager();
+        try {
+            Person p = new Person(personDTO.getfName(), personDTO.getlName(), personDTO.getEmail());
+            Address address = new Address(personDTO.getStreet());
+            TypedQuery<CityInfo> query1 = em.createQuery("Select c from CityInfo c where c.zipCode = :zip", CityInfo.class);
+            query1.setParameter("zip", personDTO.getZip());
+            CityInfo cityinfo = query1.getSingleResult();
+            address.setCityinfo(cityinfo);
+            p.setAddress(address);
+
+            TypedQuery<Hobby> query2 = em.createQuery("Select h from Hobby h where h.name = :name", Hobby.class);
+            query2.setParameter("name", personDTO.getHobbyName());
+            Hobby hobby = query2.getSingleResult();
+
+            p.addHobby(hobby);
+
+            p.addTelNo(new Phone(personDTO.getPhNumber()));
+
+            em.getTransaction().begin();
+            em.persist(p);
+            em.getTransaction().commit();
+
+            return new PersonDTO(p);
+        } finally {
+            em.close();
+        }
+    }
+
+    public PersonDTO editPerson(Person p) {
+        EntityManager em = getEntityManager();
+        try {
+            Person person = em.find(Person.class, p.getId());
+            PersonDTO pdto = null;
+
+            person.setFirstName(p.getFirstName());
+            person.setLastname(p.getLastname());
+            person.setEmail(p.getEmail());
+            if (person.getAddress() != null) {
+                person.setAddress(p.getAddress());
+            }
+            if (person.getHobbies() != null) {
+
+                {
+                    p.getHobbies();
+                }
+            }
+
+            em.getTransaction().begin();
+            em.merge(person);
+            em.getTransaction().commit();
+            pdto = new PersonDTO(person);
+            return pdto;
+        } finally {
+            em.close();
+        }
+
+    }
+
+}
